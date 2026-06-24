@@ -1,0 +1,4 @@
+email,name,department,extension,role,active,is_auth_manager,sort_order
+sample.user1@senedu.kr,홍길동,정보과,1234,user,true,false,10
+sample.subadmin1@senedu.kr,김보조,교육연구부,1235,subadmin,true,true,20
+sample.inactive1@senedu.kr,이비활성,교무부,1236,user,false,false,30

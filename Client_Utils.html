@@ -1,0 +1,700 @@
+<script>
+  function serverCall(functionName, ...args) {
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)[functionName](...args);
+    });
+  }
+
+  function showOnly(viewId) {
+    [
+      'loadingView',
+      'unregisteredView',
+      'viewHome',
+      'viewApply',
+      'viewReservations',
+      'viewMine',
+      'viewGuide',
+      'viewAdmin',
+    ].forEach(id => {
+      document.getElementById(id).classList.add('hidden');
+    });
+
+    document.getElementById(viewId).classList.remove('hidden');
+  }
+
+  function showLoading(isVisible) {
+    document.getElementById('loadingView').classList.toggle('hidden', !isVisible);
+  }
+
+  function setLoadingState(isLoading) {
+    state.isLoading = isLoading;
+
+    document.querySelectorAll('button').forEach(button => {
+      button.disabled = isLoading;
+      button.classList.toggle('opacity-60', isLoading);
+      button.classList.toggle('cursor-not-allowed', isLoading);
+    });
+  }
+
+  function showAlert(message, type) {
+    const area = document.getElementById('alertArea');
+
+    const classMap = {
+      success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+      warning: 'bg-amber-50 border-amber-200 text-amber-800',
+      error: 'bg-rose-50 border-rose-200 text-rose-800',
+      info: 'bg-blue-50 border-blue-200 text-blue-800',
+    };
+
+    area.className = `mb-4 rounded-2xl border p-4 text-sm font-semibold whitespace-pre-line ${classMap[type] || classMap.info}`;
+    area.textContent = message;
+    area.classList.remove('hidden');
+  }
+
+  function clearAlert() {
+    const area = document.getElementById('alertArea');
+    area.classList.add('hidden');
+    area.textContent = '';
+  }
+
+  function scrollToTop() {
+    setTimeout(function() {
+      window.scrollTo(0, 0);
+    }, 0);
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function escapeAttribute(value) {
+    return escapeHtml(value).replaceAll('`', '&#096;');
+  }
+
+  function localDateTimeToIso(value) {
+    if (!value) {
+      return '';
+    }
+
+    const date = new Date(value);
+    return date.toISOString();
+  }
+
+  function toDateTimeLocalValue(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hour = String(date.getHours()).padStart(2, '0');
+    const minute = String(date.getMinutes()).padStart(2, '0');
+
+    return `${year}-${month}-${day}T${hour}:${minute}`;
+  }
+
+  function getLocalDateInputValue(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+  }
+
+  function formatTimeRange(start, end) {
+    return `${formatDateTimeCompact(start)} ~ ${formatDateTimeCompact(end)}`;
+  }
+
+  function formatDateTimeCompact(value) {
+    if (!value) {
+      return '-';
+    }
+
+    const text = String(value);
+
+    if (text.length >= 16) {
+      return text.slice(5, 16);
+    }
+
+    return text;
+  }
+
+  function roundDateUpToMinutes(date, stepMinutes) {
+    const step = stepMinutes || 5;
+    const rounded = new Date(date);
+
+    rounded.setSeconds(0);
+    rounded.setMilliseconds(0);
+
+    const minutes = rounded.getMinutes();
+    const remainder = minutes % step;
+
+    if (remainder !== 0) {
+      rounded.setMinutes(minutes + (step - remainder));
+    }
+
+    return rounded;
+  }
+
+  function formatMinutes(minutes) {
+    const value = Number(minutes || 0);
+
+    if (value < 60) {
+      return `${value}분`;
+    }
+
+    const hours = Math.floor(value / 60);
+    const remain = value % 60;
+
+    return remain ? `${hours}시간 ${remain}분` : `${hours}시간`;
+  }
+
+  function renderMultilineText(value) {
+    return escapeHtml(value || '').replace(/\n/g, '<br>');
+  }
+
+  function popupValue(value) {
+    const text = String(value ?? '').trim();
+    return text || '-';
+  }
+
+  function popupRoleLabel(role) {
+    const text = String(role ?? '').trim();
+
+    const roleMap = {
+      admin: '관리자',
+      subadmin: '보조관리자',
+      user: '일반사용자',
+    };
+
+    return roleMap[text] || popupValue(text);
+  }
+
+  function formatPopupDateTime(value) {
+    const text = popupValue(value);
+
+    if (text === '-') {
+      return '-';
+    }
+
+    // 예: 2026-06-22 09:00:00 -> 2026-06-22 09:00
+    if (text.length >= 16) {
+      return text.slice(0, 16);
+    }
+
+    return text;
+  }
+
+  function formatPopupTimeRange(start, end) {
+    const startText = formatPopupDateTime(start);
+    const endText = formatPopupDateTime(end);
+
+    if (startText === '-' || endText === '-') {
+      return `${startText} ~ ${endText}`;
+    }
+
+    // 같은 날짜면 종료 시간은 HH:mm만 표시
+    // 예: 2026-06-22 09:00 ~ 10:00
+    if (
+      startText.length >= 16 &&
+      endText.length >= 16 &&
+      startText.slice(0, 10) === endText.slice(0, 10)
+    ) {
+      return `${startText} ~ ${endText.slice(11, 16)}`;
+    }
+
+    return `${startText} ~ ${endText}`;
+  }
+
+  function buildReservationCancelConfirmMessage(reservation) {
+    return [
+      '아래 예약을 취소하시겠습니까?',
+      '',
+      '작업명: ' + popupValue(reservation && reservation.work_title),
+      '시간: ' + formatPopupTimeRange(
+        reservation && reservation.start_time,
+        reservation && reservation.end_time
+      ),
+      '상태: ' + popupValue(reservation && reservation.status),
+    ].join('\n');
+  }
+
+  function buildRegistrationApproveConfirmMessage(request) {
+    return [
+      '아래 등록 요청을 승인하시겠습니까?',
+      '',
+      '이름: ' + popupValue(request && request.name),
+      '부서: ' + popupValue(request && request.department),
+      '내선: ' + popupValue(request && request.extension),
+      '이메일: ' + popupValue(request && request.email),
+    ].join('\n');
+  }
+
+  function buildRegistrationRejectConfirmMessage(request) {
+    return [
+      '아래 등록 요청을 반려하시겠습니까?',
+      '',
+      '이름: ' + popupValue(request && request.name),
+      '부서: ' + popupValue(request && request.department),
+      '이메일: ' + popupValue(request && request.email),
+      '',
+      '반려 사유를 입력할 수 있습니다.',
+    ].join('\n');
+  }
+
+  function buildUserDeactivateConfirmMessage(user) {
+    return [
+      '아래 사용자를 비활성화하시겠습니까?',
+      '',
+      '이름: ' + popupValue(user && user.name),
+      '부서: ' + popupValue(user && user.department),
+      '이메일: ' + popupValue(user && user.email),
+      '권한: ' + popupRoleLabel(user && user.role),
+      '',
+      '비활성화 후 예약 시스템을 사용할 수 없습니다.',
+    ].join('\n');
+  }
+
+  function buildUserActivateConfirmMessage(user) {
+    return [
+      '아래 사용자를 활성화하시겠습니까?',
+      '',
+      '이름: ' + popupValue(user && user.name),
+      '부서: ' + popupValue(user && user.department),
+      '이메일: ' + popupValue(user && user.email),
+      '권한: ' + popupRoleLabel(user && user.role),
+      '',
+      '활성화 후 예약 시스템을 사용할 수 있습니다.',
+    ].join('\n');
+  }
+
+  function getAppSetting(key, fallback) {
+    const settings = state && state.data && state.data.settings
+      ? state.data.settings
+      : {};
+
+    const value = settings[key];
+
+    if (value === undefined || value === null || String(value).trim() === '') {
+      return fallback;
+    }
+
+    return String(value);
+  }
+
+  function getAppSettingNumber(key, fallback) {
+    const value = Number(getAppSetting(key, fallback));
+
+    if (!Number.isFinite(value)) {
+      return fallback;
+    }
+
+    return value;
+  }
+
+  function isActiveUser() {
+    return Boolean(
+      state.data &&
+      state.data.currentUser &&
+      state.data.currentUser.active === true
+    );
+  }
+
+  function isAdmin() {
+    return Boolean(state.data && state.data.isAdmin === true);
+  }
+
+  function showConfirmModal(options) {
+    const config = options || {};
+    const title = String(config.title || '확인');
+    const message = String(config.message || '');
+    const confirmText = String(config.confirmText || '확인');
+    const cancelText = String(config.cancelText || '취소');
+    const danger = config.danger === true;
+
+    return new Promise(resolve => {
+      const previousActiveElement = document.activeElement;
+      const existingModal = document.querySelector('[data-custom-modal]');
+
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      const overlay = document.createElement('div');
+
+      overlay.dataset.customModal = 'true';
+      overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+
+      overlay.innerHTML = `
+        <div class="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-xl p-5">
+          <h2 class="text-lg font-bold mb-3">${escapeHtml(title)}</h2>
+
+          <div class="text-sm text-slate-700 leading-relaxed whitespace-pre-line mb-5">
+            ${escapeHtml(message)}
+          </div>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-secondary" data-modal-cancel>
+              ${escapeHtml(cancelText)}
+            </button>
+
+            <button
+              type="button"
+              class="${danger ? 'btn-small-danger' : 'btn-primary'}"
+              data-modal-confirm
+            >
+              ${escapeHtml(confirmText)}
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      const confirmButton = overlay.querySelector('[data-modal-confirm]');
+      const cancelButton = overlay.querySelector('[data-modal-cancel]');
+
+      function closeModal(result) {
+        overlay.remove();
+
+        if (
+          previousActiveElement &&
+          typeof previousActiveElement.focus === 'function'
+        ) {
+          previousActiveElement.focus();
+        }
+
+        resolve(result);
+      }
+
+      confirmButton.addEventListener('click', () => {
+        closeModal(true);
+      });
+
+      cancelButton.addEventListener('click', () => {
+        closeModal(false);
+      });
+
+      overlay.addEventListener('click', event => {
+        if (event.target === overlay) {
+          closeModal(false);
+        }
+      });
+
+      overlay.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          closeModal(false);
+        }
+      });
+
+      confirmButton.focus();
+    });
+  }
+
+ 
+  function showInputModal(options) {
+    const config = options || {};
+    const title = String(config.title || '입력');
+    const message = String(config.message || '');
+    const label = String(config.label || '입력값');
+    const initialValue = String(config.initialValue ?? '');
+    const placeholder = String(config.placeholder || '');
+    const confirmText = String(config.confirmText || '확인');
+    const cancelText = String(config.cancelText || '취소');
+    const danger = config.danger === true;
+    const multiline = config.multiline !== false;
+    const maxLength = Number(config.maxLength || 0);
+
+    return new Promise(resolve => {
+      const previousActiveElement = document.activeElement;
+      const existingModal = document.querySelector('[data-custom-modal]');
+
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      const overlay = document.createElement('div');
+
+      overlay.dataset.customModal = 'true';
+      overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+
+      const inputHtml = multiline
+        ? `
+          <textarea
+            class="input min-h-28"
+            data-modal-input
+            ${maxLength > 0 ? `maxlength="${escapeAttribute(maxLength)}"` : ''}
+            placeholder="${escapeAttribute(placeholder)}"
+          >${escapeHtml(initialValue)}</textarea>
+        `
+        : `
+          <input
+            type="text"
+            class="input"
+            data-modal-input
+            value="${escapeAttribute(initialValue)}"
+            ${maxLength > 0 ? `maxlength="${escapeAttribute(maxLength)}"` : ''}
+            placeholder="${escapeAttribute(placeholder)}"
+          >
+        `;
+
+      overlay.innerHTML = `
+        <div class="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-xl p-5">
+          <h2 class="text-lg font-bold mb-3">${escapeHtml(title)}</h2>
+
+          <div class="text-sm text-slate-700 leading-relaxed whitespace-pre-line mb-4">
+            ${escapeHtml(message)}
+          </div>
+
+          <label class="block text-sm font-semibold mb-2">
+            ${escapeHtml(label)}
+          </label>
+
+          ${inputHtml}
+
+          ${maxLength > 0
+            ? `
+              <p class="mt-2 text-xs text-slate-400">
+                ${escapeHtml(String(maxLength))}자 이하
+              </p>
+            `
+            : ''
+          }
+
+          <div class="mt-5 flex justify-end gap-2">
+            <button type="button" class="btn-secondary" data-modal-cancel>
+              ${escapeHtml(cancelText)}
+            </button>
+
+            <button
+              type="button"
+              class="${danger ? 'btn-small-danger' : 'btn-primary'}"
+              data-modal-confirm
+            >
+              ${escapeHtml(confirmText)}
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      const input = overlay.querySelector('[data-modal-input]');
+      const confirmButton = overlay.querySelector('[data-modal-confirm]');
+      const cancelButton = overlay.querySelector('[data-modal-cancel]');
+
+      function closeModal(result) {
+        overlay.remove();
+
+        if (
+          previousActiveElement &&
+          typeof previousActiveElement.focus === 'function'
+        ) {
+          previousActiveElement.focus();
+        }
+
+        resolve(result);
+      }
+
+      confirmButton.addEventListener('click', () => {
+        closeModal(input ? String(input.value ?? '') : '');
+      });
+
+      cancelButton.addEventListener('click', () => {
+        closeModal(null);
+      });
+
+      overlay.addEventListener('click', event => {
+        if (event.target === overlay) {
+          closeModal(null);
+        }
+      });
+
+      overlay.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          closeModal(null);
+        }
+
+        if (!multiline && event.key === 'Enter') {
+          event.preventDefault();
+          closeModal(input ? String(input.value ?? '') : '');
+        }
+      });
+
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    });
+  }
+
+
+  function setupAutoLock() {
+    if (state.autoLockListenersAttached) {
+      return;
+    }
+
+    state.autoLockListenersAttached = true;
+
+    ['click', 'keydown', 'mousemove', 'touchstart', 'scroll'].forEach(eventName => {
+      document.addEventListener(eventName, handleAutoLockActivity, { passive: true });
+    });
+  }
+
+
+  function handleAutoLockActivity() {
+    if (state.screenLocked) {
+      return;
+    }
+
+    const now = Date.now();
+
+    if (now - Number(state.autoLockLastActivityAt || 0) < 15000) {
+      return;
+    }
+
+    state.autoLockLastActivityAt = now;
+    resetAutoLockTimer();
+  }
+
+
+  function shouldRunAutoLock() {
+    return Boolean(
+      state.initialized &&
+      state.data &&
+      state.data.currentUser &&
+      state.data.currentUser.email
+    );
+  }
+
+
+  function resetAutoLockTimer() {
+    clearAutoLockTimer();
+
+    if (!shouldRunAutoLock()) {
+      return;
+    }
+
+    const minutes = Number(state.autoLockMinutes || 30);
+
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      return;
+    }
+
+    state.autoLockTimerId = setTimeout(function() {
+      lockApplication('auto');
+    }, minutes * 60 * 1000);
+  }
+
+
+  function clearAutoLockTimer() {
+    if (state.autoLockTimerId) {
+      clearTimeout(state.autoLockTimerId);
+    }
+
+    state.autoLockTimerId = null;
+  }
+
+
+  function lockApplication(reason) {
+    if (state.screenLocked) {
+      return;
+    }
+
+    state.screenLocked = true;
+    state.screenLockReason = reason || 'manual';
+
+    clearAutoLockTimer();
+
+    const existingModal = document.querySelector('[data-custom-modal]');
+
+    if (existingModal) {
+      existingModal.remove();
+    }
+
+    const existingOverlay = document.querySelector('[data-screen-lock-overlay]');
+
+    if (existingOverlay) {
+      existingOverlay.remove();
+    }
+
+    const isAuto = state.screenLockReason === 'auto';
+    const overlay = document.createElement('div');
+
+    overlay.dataset.screenLockOverlay = 'true';
+    overlay.className = 'fixed inset-0 z-50 bg-slate-950 text-white flex items-center justify-center px-4';
+
+    overlay.innerHTML = `
+      <div class="w-full max-w-xl rounded-3xl border border-white/10 bg-white/10 p-6 shadow-2xl">
+        <div class="mb-5">
+          <p class="text-sm font-semibold text-slate-300 mb-2">
+            ${isAuto ? '미사용 자동 잠금' : '사용 종료'}
+          </p>
+
+          <h2 class="text-2xl font-bold">
+            예약 시스템 화면이 잠겼습니다
+          </h2>
+        </div>
+
+        <div class="rounded-2xl bg-white/10 border border-white/10 p-4 text-sm leading-relaxed text-slate-100">
+          <p class="font-bold mb-2">공용 PC 사용 후 확인</p>
+
+          <ol class="list-decimal pl-5 space-y-1">
+            <li>GPT 화면에서 로그아웃했는지 확인하세요.</li>
+            <li>필요하면 Google 계정에서도 로그아웃하세요.</li>
+            <li>브라우저 창을 닫거나 새 사용자가 다시 접속하게 하세요.</li>
+          </ol>
+        </div>
+
+        <div class="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100 leading-relaxed">
+          이 화면 잠금은 Google 계정 또는 GPT 계정 로그아웃을 대신하지 않습니다.
+          공용 PC에서는 반드시 GPT와 Google 계정 세션을 직접 확인해야 합니다.
+        </div>
+
+        <div class="mt-6 flex flex-col md:flex-row gap-2 md:justify-end">
+          <button type="button" class="btn-secondary" data-lock-reload>
+            다시 접속
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.classList.add('overflow-hidden');
+    document.body.appendChild(overlay);
+
+    const reloadButton = overlay.querySelector('[data-lock-reload]');
+
+    if (reloadButton) {
+      reloadButton.addEventListener('click', reloadApplication);
+    }
+  }
+
+
+  function reloadApplication() {
+    const currentUrl = String(window.location.href || '');
+
+    try {
+      const url = new URL(currentUrl);
+
+      url.hash = '';
+      url.searchParams.set('_reload', String(Date.now()));
+
+      window.location.href = url.toString();
+    } catch (error) {
+      const baseUrl = currentUrl.split('#')[0];
+      const separator = baseUrl.indexOf('?') === -1 ? '?' : '&';
+
+      window.location.href = baseUrl + separator + '_reload=' + Date.now();
+    }
+  }
+
+
+</script>

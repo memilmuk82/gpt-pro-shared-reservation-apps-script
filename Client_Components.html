@@ -1,0 +1,1422 @@
+<script>
+  function card(content) {
+    return `
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        ${content}
+      </div>
+    `;
+  }
+
+  function statusBadge(status) {
+    const cleanStatus = String(status || '').trim();
+
+    const map = {
+      '사용중': 'bg-blue-50 text-blue-700 border-blue-200',
+      '예약': 'bg-slate-50 text-slate-700 border-slate-200',
+      '완료': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      '취소': 'bg-slate-50 text-slate-500 border-slate-200',
+      '삭제됨': 'bg-rose-50 text-rose-700 border-rose-200',
+      '예약시간도래': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      '종료 예정 시간 경과': 'bg-amber-50 text-amber-700 border-amber-200',
+      '대기': 'bg-amber-50 text-amber-700 border-amber-200',
+      '승인': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      '반려': 'bg-rose-50 text-rose-700 border-rose-200',
+      '활성': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      '비활성': 'bg-slate-50 text-slate-500 border-slate-200',
+    };
+
+    const className = map[cleanStatus] || 'bg-slate-50 text-slate-700 border-slate-200';
+
+    return `
+      <span class="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${className}">
+        ${escapeHtml(cleanStatus || '상태 없음')}
+      </span>
+    `;
+  }
+
+  function infoRow(label, value) {
+    return `
+      <div>
+        <p class="text-sm text-slate-500">${escapeHtml(label)}</p>
+        <p class="font-semibold">${escapeHtml(value || '-')}</p>
+      </div>
+    `;
+  }
+
+  function metricCard(label, value) {
+    return `
+      <div class="rounded-xl bg-slate-50 border border-slate-200 p-4">
+        <p class="text-sm text-slate-500">${escapeHtml(label)}</p>
+        <p class="text-2xl font-bold mt-1">${escapeHtml(value)}</p>
+      </div>
+    `;
+  }
+
+  function renderSimpleTable(headers, rows) {
+    if (!rows || rows.length === 0) {
+      return `
+        <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 text-slate-600">
+          표시할 데이터가 없습니다.
+        </div>
+      `;
+    }
+
+    return `
+      <div class="overflow-x-auto rounded-xl border border-slate-200">
+        <table class="min-w-full text-sm">
+          <thead class="bg-slate-50">
+            <tr>
+              ${headers.map(header => `<th class="text-left p-3 font-semibold text-slate-600">${escapeHtml(header)}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200 bg-white">
+            ${rows.map(row => `
+              <tr>
+                ${row.map(cell => `<td class="p-3">${escapeHtml(cell)}</td>`).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function renderReservationList(reservations, emptyMessage) {
+    if (!reservations || reservations.length === 0) {
+      return `
+        <div class="rounded-xl bg-slate-50 border border-slate-200 p-5 text-slate-600">
+          ${escapeHtml(emptyMessage)}
+        </div>
+      `;
+    }
+
+    return `
+      <div class="grid gap-3">
+        ${reservations.map(reservation => `
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+              <div>
+                <div class="flex items-center gap-2 mb-1">
+                  <p class="font-bold">${escapeHtml(reservation.work_title)}</p>
+                  ${statusBadge(reservation.status)}
+                </div>
+                <p class="text-sm text-slate-600">
+                  ${escapeHtml(reservation.user_name)} / ${escapeHtml(reservation.department)}
+                </p>
+                <p class="text-sm text-slate-600 mt-1">
+                  ${escapeHtml(formatTimeRange(reservation.start_time, reservation.end_time))}
+                </p>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function renderMyReservationList(reservations) {
+    if (!reservations || reservations.length === 0) {
+      return `
+        <div class="rounded-xl bg-slate-50 border border-slate-200 p-5 text-slate-600">
+          내 예약이 없습니다.
+        </div>
+      `;
+    }
+
+    return `
+      <div class="grid gap-3">
+        ${reservations.map(reservation => `
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+              <div>
+                <div class="flex items-center gap-2 mb-1">
+                  <p class="font-bold">${escapeHtml(reservation.work_title)}</p>
+                  ${statusBadge(reservation.status)}
+                </div>
+                <p class="text-sm text-slate-600">${escapeHtml(reservation.work_type)}</p>
+                <p class="text-sm text-slate-600 mt-1">${escapeHtml(formatTimeRange(reservation.start_time, reservation.end_time))}</p>
+              </div>
+
+              <div class="flex flex-wrap gap-2">
+                ${reservation.status === '예약'
+                  ? `
+                    <button class="btn-small-secondary" data-action="start" data-id="${escapeAttribute(reservation.reservation_id)}">
+                      ${icon('play')}
+                      사용 시작
+                    </button>
+                    <button class="btn-small-danger" data-action="cancel" data-id="${escapeAttribute(reservation.reservation_id)}">
+                      ${icon('x')}
+                      취소
+                    </button>
+                  `
+                  : ''
+                }
+
+                ${reservation.status === '사용중'
+                  ? `
+                    <button class="btn-small-primary" data-action="complete" data-id="${escapeAttribute(reservation.reservation_id)}">
+                      ${icon('check')}
+                      사용 완료
+                    </button>
+                  `
+                  : ''
+                }
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function renderGuideCards() {
+    const guides = state.data.guides || [];
+
+    if (guides.length === 0) {
+      return card('<p class="text-slate-600">등록된 안내 항목이 없습니다.</p>');
+    }
+
+    return guides.map(guide => card(`
+      <div class="flex items-start gap-3">
+        <div class="mt-1 text-slate-500">${guideIcon(guide.category)}</div>
+        <div>
+          <p class="text-sm font-semibold text-slate-500 mb-1">${escapeHtml(guide.category)}</p>
+          <h3 class="text-lg font-bold mb-3">${escapeHtml(guide.title)}</h3>
+          <div class="text-slate-700 leading-relaxed text-sm">
+            ${renderMultilineText(guide.content)}
+          </div>
+        </div>
+      </div>
+    `)).join('');
+  }
+
+  function renderAuthManagerCard(authManagers) {
+    const boardReferenceMessage = getAppSetting(
+      'board_reference_message',
+      'GPT 접속 링크, 공용 계정, 비밀번호는 업무게시판의 안내글을 참고해 주세요. 예약 시스템에는 계정과 비밀번호를 저장하지 않습니다.'
+    );
+
+    const logoutNotice = getAppSetting(
+      'logout_notice',
+      '브라우저를 닫는 것만으로는 로그아웃되지 않을 수 있습니다. 다음 사용자가 이전 세션을 볼 수 있으므로 사용 후 GPT에서 로그아웃해 주세요.'
+    );
+
+    const authMessage = getAppSetting(
+      'auth_message',
+      'GPT Pro 로그인 인증번호가 필요한 경우 담당 관리자에게 요청해 주세요.'
+    );
+
+    const managerList = authManagers && authManagers.length > 0
+      ? `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          ${authManagers.map(manager => `
+            <div class="rounded-xl bg-slate-50 border border-slate-200 p-4">
+              <p class="font-bold">${escapeHtml(manager.name)}</p>
+              <p class="text-sm text-slate-600">${escapeHtml(manager.department)}</p>
+              <p class="text-sm text-slate-600 mt-2">내선: ${escapeHtml(manager.extension || '미입력')}</p>
+            </div>
+          `).join('')}
+        </div>
+      `
+      : `
+        <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 text-slate-600">
+          등록된 인증번호 담당자가 없습니다.
+        </div>
+      `;
+
+    return card(`
+      <h2 class="text-lg font-bold flex items-center gap-2 mb-4">
+        ${icon('lock')}
+        GPT 접속 및 인증번호 안내
+      </h2>
+
+      <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4 mb-4">
+        <p class="font-bold mb-2">접속 정보</p>
+        <p class="text-sm text-slate-600 leading-relaxed">
+          ${escapeHtml(boardReferenceMessage)}
+        </p>
+      </div>
+
+      <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4 mb-4">
+        <p class="font-bold mb-2">사용 절차</p>
+        <ol class="text-sm text-slate-700 leading-relaxed list-decimal pl-5 space-y-1">
+          <li>예약 등록 또는 지금 사용 시작을 먼저 진행합니다.</li>
+          <li>업무게시판의 GPT 접속 링크로 이동합니다.</li>
+          <li>Google 로그인을 선택한 뒤 부서 공용 계정으로 로그인합니다.</li>
+          <li>인증번호가 필요한 경우 아래 담당자에게 문의합니다.</li>
+          <li>사용 후 반드시 GPT에서 로그아웃합니다.</li>
+        </ol>
+      </div>
+
+      <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 mb-4 text-amber-900">
+        <p class="font-bold mb-1">사용 후 로그아웃 권장</p>
+        <p class="text-sm leading-relaxed">
+          ${escapeHtml(logoutNotice)}
+        </p>
+      </div>
+
+      <p class="font-bold mb-3">인증번호 문의 담당자</p>
+      ${managerList}
+
+      <p class="mt-4 text-sm text-slate-500">
+        ${escapeHtml(authMessage)}
+      </p>
+    `);
+  }
+
+  function renderCurrentReservationCard(reservation) {
+    if (!reservation) {
+      return card(`
+        <div class="flex items-start gap-3">
+          <div class="text-slate-500 mt-1">${icon('check')}</div>
+          <div>
+            <p class="text-sm font-semibold text-slate-500 mb-1">현재 사용중</p>
+            <h2 class="text-xl font-bold">현재 사용중인 사용자가 없습니다</h2>
+            <p class="text-slate-600 mt-2">사용 전 오늘 예약 현황을 확인해 주세요.</p>
+          </div>
+        </div>
+      `);
+    }
+
+    const stateLabel = reservation.current_state || reservation.status;
+
+    return card(`
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-sm font-semibold text-slate-500 mb-1">현재 사용중</p>
+          <h2 class="text-xl font-bold">${escapeHtml(reservation.user_name)}</h2>
+          <p class="text-slate-600">${escapeHtml(reservation.department)}</p>
+        </div>
+        ${statusBadge(stateLabel)}
+      </div>
+
+      <div class="mt-5 space-y-3">
+        ${infoRow('작업', reservation.work_title)}
+        ${infoRow('시간', formatTimeRange(reservation.start_time, reservation.end_time))}
+        ${infoRow('상태', stateLabel)}
+      </div>
+
+      ${stateLabel === '종료 예정 시간 경과'
+        ? `
+          <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            종료 예정 시간이 지났습니다. 필요 시 해당 부서원과 조율해 주세요.
+          </div>
+        `
+        : ''
+      }
+    `);
+  }
+
+  function renderNextReservationCard(reservation) {
+    if (!reservation) {
+      return card(`
+        <div class="flex items-start gap-3">
+          <div class="text-slate-500 mt-1">${icon('calendar')}</div>
+          <div>
+            <p class="text-sm font-semibold text-slate-500 mb-1">다음 예약</p>
+            <h2 class="text-xl font-bold">예정된 다음 예약이 없습니다</h2>
+            <p class="text-slate-600 mt-2">필요한 경우 사용 신청을 등록해 주세요.</p>
+          </div>
+        </div>
+      `);
+    }
+
+    return card(`
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-sm font-semibold text-slate-500 mb-1">다음 예약</p>
+          <h2 class="text-xl font-bold">${escapeHtml(reservation.user_name)}</h2>
+          <p class="text-slate-600">${escapeHtml(reservation.department)}</p>
+        </div>
+        ${statusBadge(reservation.status)}
+      </div>
+
+      <div class="mt-5 space-y-3">
+        ${infoRow('작업', reservation.work_title)}
+        ${infoRow('시간', formatTimeRange(reservation.start_time, reservation.end_time))}
+      </div>
+    `);
+  }
+
+  function renderRegistrationRequestStatus(request) {
+    if (!request) {
+      return '';
+    }
+
+    const note = request.note
+      ? `
+        <div class="mt-3 rounded-xl bg-white/70 border border-slate-200 p-3 text-sm">
+          <p class="text-slate-500">관리자 메모</p>
+          <p class="font-semibold">${escapeHtml(request.note)}</p>
+        </div>
+      `
+      : '';
+
+    return card(`
+      <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+        <div>
+          <h3 class="text-lg font-bold mb-1">등록 요청 상태</h3>
+          <p class="text-sm text-slate-600">
+            ${escapeHtml(request.name)} / ${escapeHtml(request.department)} / 내선 ${escapeHtml(request.extension || '미입력')}
+          </p>
+          <p class="text-sm text-slate-500 mt-1">
+            요청일: ${escapeHtml(request.created_at || '-')}
+          </p>
+        </div>
+        ${statusBadge(request.status)}
+      </div>
+
+      ${request.status === '대기'
+        ? `
+          <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            등록 요청이 접수되었습니다. 관리자의 승인을 기다려 주세요.
+          </div>
+        `
+        : ''
+      }
+
+      ${request.status === '승인'
+        ? `
+          <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+            등록 요청이 승인되었습니다. 화면을 새로고침하거나 다시 접속해 주세요.
+          </div>
+        `
+        : ''
+      }
+
+      ${request.status === '반려'
+        ? `
+          <div class="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+            등록 요청이 반려되었습니다. 필요한 경우 정보를 수정하여 다시 요청할 수 있습니다.
+          </div>
+        `
+        : ''
+      }
+
+      ${note}
+    `);
+  }
+
+  function renderRegistrationRequestForm() {
+    return card(`
+      <h3 class="text-lg font-bold flex items-center gap-2 mb-4">
+        ${icon('user')}
+        등록 요청
+      </h3>
+
+      <div class="grid gap-4">
+        <div>
+          <label class="block text-sm font-semibold mb-2">이름</label>
+          <input id="requestName" type="text" class="input" placeholder="예: 홍길동">
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold mb-2">부서</label>
+          <input id="requestDepartment" type="text" class="input" placeholder="예: 정보과">
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold mb-2">내선번호</label>
+          <input id="requestExtension" type="text" class="input" placeholder="예: 1234">
+          <p class="mt-2 text-sm text-slate-500">
+            휴대폰 번호는 입력하지 않습니다.
+          </p>
+        </div>
+
+        <div>
+          <button id="registrationRequestButton" type="button" class="btn-primary">
+            ${icon('plus')}
+            등록 요청
+          </button>
+        </div>
+      </div>
+    `);
+  }
+
+  function renderRegistrationRequests(requests) {
+    if (!requests || requests.length === 0) {
+      return card(`
+        <h3 class="text-lg font-bold flex items-center gap-2 mb-3">
+          ${icon('user')}
+          등록 요청 목록
+        </h3>
+        <div class="rounded-xl bg-slate-50 border border-slate-200 p-5 text-slate-600">
+          등록 요청이 없습니다.
+        </div>
+      `);
+    }
+
+    return card(`
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        <div>
+          <h3 class="text-lg font-bold flex items-center gap-2">
+            ${icon('user')}
+            등록 요청 목록
+          </h3>
+          <p class="text-sm text-slate-600 mt-1">대기 요청은 승인 또는 반려할 수 있습니다.</p>
+        </div>
+        <button type="button" class="btn-secondary" onclick="handleLoadRegistrationRequests()">
+          ${icon('search')}
+          새로고침
+        </button>
+      </div>
+
+      <div class="grid gap-3">
+        ${requests.map(request => `
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+              <div>
+                <div class="flex items-center gap-2 mb-1">
+                  <p class="font-bold">${escapeHtml(request.name)}</p>
+                  ${statusBadge(request.status)}
+                </div>
+
+                <p class="text-sm text-slate-600">
+                  ${escapeHtml(request.department)} / 내선 ${escapeHtml(request.extension || '미입력')}
+                </p>
+
+                <p class="text-sm text-slate-600 mt-1">
+                  ${escapeHtml(request.email)}
+                </p>
+
+                <p class="text-sm text-slate-500 mt-1">
+                  요청일: ${escapeHtml(request.created_at || '-')}
+                </p>
+
+                ${request.note
+                  ? `
+                    <p class="text-sm text-slate-500 mt-1">
+                      메모: ${escapeHtml(request.note)}
+                    </p>
+                  `
+                  : ''
+                }
+              </div>
+
+              <div class="flex flex-wrap gap-2">
+                ${request.status === '대기'
+                  ? `
+                    <button
+                      type="button"
+                      class="btn-small-primary"
+                      data-request-action="approve"
+                      data-request-id="${escapeAttribute(request.request_id)}"
+                    >
+                      ${icon('check')}
+                      승인
+                    </button>
+
+                    <button
+                      type="button"
+                      class="btn-small-danger"
+                      data-request-action="reject"
+                      data-request-id="${escapeAttribute(request.request_id)}"
+                    >
+                      ${icon('x')}
+                      반려
+                    </button>
+                  `
+                  : ''
+                }
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `);
+  }
+
+  function renderStats(stats) {
+    const summary = stats.summary || {};
+
+    return card(`
+      <h3 class="text-lg font-bold flex items-center gap-2 mb-4">
+        ${icon('chart')}
+        통계
+      </h3>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
+        ${metricCard('전체 예약', summary.total_reservations || 0)}
+        ${metricCard('집계 대상', summary.countable_reservations || 0)}
+        ${metricCard('예약 기준', formatMinutes(summary.reserved_minutes || 0))}
+        ${metricCard('실제 사용', formatMinutes(summary.actual_minutes || 0))}
+      </div>
+
+      <div class="grid gap-5">
+        <div>
+          <h4 class="font-bold mb-2">사용자별 통계</h4>
+          ${renderSimpleTable(
+            ['이름', '부서', '예약', '예약 기준', '실제 사용'],
+            (stats.byUser || []).map(item => [
+              item.name || '-',
+              item.department || '-',
+              item.reservation_count,
+              formatMinutes(item.reserved_minutes),
+              formatMinutes(item.actual_minutes),
+            ])
+          )}
+        </div>
+
+        <div>
+          <h4 class="font-bold mb-2">작업 유형별 통계</h4>
+          ${renderSimpleTable(
+            ['작업 유형', '횟수', '예약 기준', '실제 사용'],
+            (stats.byWorkType || []).map(item => [
+              item.work_type,
+              item.count,
+              formatMinutes(item.reserved_minutes),
+              formatMinutes(item.actual_minutes),
+            ])
+          )}
+        </div>
+      </div>
+    `);
+  }
+
+  function renderUserManagement(users) {
+    const safeUsers = users || [];
+
+    return card(`
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        <div>
+          <h3 class="text-lg font-bold flex items-center gap-2">
+            ${icon('user')}
+            사용자 관리
+          </h3>
+          <p class="text-sm text-slate-600 mt-1">
+            부서원 계정, 권한, 사용 여부, 인증번호 담당자 여부를 관리합니다.
+          </p>
+        </div>
+
+        <button type="button" class="btn-primary" data-user-action="create">
+          ${icon('plus')}
+          사용자 추가
+        </button>
+      </div>
+
+      ${state.adminUserFormMode ? renderUserForm(state.adminUserFormData, state.adminUserFormMode) : ''}
+
+      ${renderUserBulkCreatePanel()}
+
+      ${renderUsersTable(safeUsers)}
+    `);
+  }
+
+
+  function renderUserBulkCreatePanel() {
+    const rows = state.adminUserBulkRows || [];
+    const fileName = state.adminUserBulkFileName || '';
+    const hasRows = rows.length > 0;
+
+    return `
+      <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 mb-5">
+        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
+          <div>
+            <h4 class="font-bold flex items-center gap-2">
+              ${icon('plus')}
+              CSV 일괄 등록
+            </h4>
+            <p class="text-sm text-slate-600 mt-1">
+              CSV 파일을 선택하면 등록 대상자를 미리 확인할 수 있습니다.
+            </p>
+            <p class="text-xs text-slate-500 mt-2">
+              컬럼: email,name,department,extension,role,active,is_auth_manager,sort_order
+            </p>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <button
+              id="submitUserBulkCreateButton"
+              type="button"
+              class="btn-primary ${hasRows ? '' : 'opacity-60 cursor-not-allowed'}"
+              ${hasRows ? '' : 'disabled'}
+            >
+              ${icon('check')}
+              검증 후 일괄 등록
+            </button>
+
+            <button
+              id="clearUserBulkCreateButton"
+              type="button"
+              class="btn-secondary"
+            >
+              ${icon('x')}
+              미리보기 초기화
+            </button>
+          </div>
+        </div>
+
+        <div class="grid gap-3">
+          <div>
+            <label class="block text-sm font-semibold mb-2">CSV 파일</label>
+            <input
+              id="adminUserBulkCsvInput"
+              type="file"
+              accept=".csv,text/csv"
+              class="input bg-white"
+            >
+            ${fileName
+              ? `
+                <p class="mt-2 text-sm text-slate-500">
+                  선택한 파일: ${escapeHtml(fileName)}
+                </p>
+              `
+              : ''
+            }
+          </div>
+
+          <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            서버 검증에서 하나라도 실패하면 어떤 사용자도 저장하지 않습니다.
+          </div>
+
+          ${renderUserBulkPreview(rows)}
+        </div>
+      </div>
+    `;
+  }
+
+
+  function renderUserBulkPreview(rows) {
+    const safeRows = rows || [];
+    const results = state.adminUserBulkResults || [];
+
+    if (safeRows.length === 0) {
+      return `
+        <div class="rounded-xl bg-white border border-slate-200 p-4 text-sm text-slate-600">
+          CSV 파일을 선택하면 미리보기가 표시됩니다.
+        </div>
+      `;
+    }
+
+    const resultMap = {};
+
+    results.forEach(result => {
+      if (!result || result.row_number === undefined) {
+        return;
+      }
+
+      resultMap[String(result.row_number)] = result;
+    });
+
+    return `
+      <div class="mt-2">
+        <div class="flex items-center justify-between gap-3 mb-2">
+          <p class="text-sm font-semibold text-slate-700">
+            미리보기 ${safeRows.length}명
+          </p>
+          <p class="text-xs text-slate-500">
+            프론트 미리보기이며, 최종 검증은 서버에서 수행합니다.
+          </p>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+          <table class="min-w-full text-sm">
+            <thead class="bg-slate-50">
+              <tr>
+                <th class="text-left p-3 font-semibold text-slate-600">행</th>
+                <th class="text-left p-3 font-semibold text-slate-600">이메일</th>
+                <th class="text-left p-3 font-semibold text-slate-600">이름</th>
+                <th class="text-left p-3 font-semibold text-slate-600">부서</th>
+                <th class="text-left p-3 font-semibold text-slate-600">내선</th>
+                <th class="text-left p-3 font-semibold text-slate-600">권한</th>
+                <th class="text-left p-3 font-semibold text-slate-600">활성</th>
+                <th class="text-left p-3 font-semibold text-slate-600">인증 담당</th>
+                <th class="text-left p-3 font-semibold text-slate-600">정렬</th>
+                <th class="text-left p-3 font-semibold text-slate-600">검증 결과</th>
+              </tr>
+            </thead>
+
+            <tbody class="divide-y divide-slate-200">
+              ${safeRows.map(row => {
+                const result = resultMap[String(row.row_number || '')];
+
+                return `
+                  <tr>
+                    <td class="p-3">${escapeHtml(row.row_number || '-')}</td>
+                    <td class="p-3">${escapeHtml(row.email || '')}</td>
+                    <td class="p-3">${escapeHtml(row.name || '')}</td>
+                    <td class="p-3">${escapeHtml(row.department || '')}</td>
+                    <td class="p-3">${escapeHtml(row.extension || '')}</td>
+                    <td class="p-3">${escapeHtml(row.role || '')}</td>
+                    <td class="p-3">${escapeHtml(row.active || '')}</td>
+                    <td class="p-3">${escapeHtml(row.is_auth_manager || '')}</td>
+                    <td class="p-3">${escapeHtml(row.sort_order || '')}</td>
+                    <td class="p-3">${renderUserBulkResultStatus(result)}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+
+  function renderUserBulkResultStatus(result) {
+    if (!result) {
+      return `
+        <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-500">
+          서버 검증 전
+        </span>
+      `;
+    }
+
+    if (result.ok === true) {
+      return `
+        <span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+          통과
+        </span>
+      `;
+    }
+
+    return `
+      <div class="text-rose-700">
+        <p class="font-bold text-xs">실패</p>
+        <p class="text-xs mt-1">${escapeHtml(result.message || '검증 실패')}</p>
+      </div>
+    `;
+  }
+
+
+  function renderUserForm(user, mode) {
+    const isEdit = mode === 'edit';
+    const safeUser = user || {};
+    const isLastAdmin = isEdit && isLastActiveAdminUser(safeUser, state.adminUsers || []);
+
+    const title = isEdit ? '사용자 수정' : '사용자 추가';
+    const emailDisabled = isEdit ? 'disabled' : '';
+    const roleDisabled = isLastAdmin ? 'disabled' : '';
+    const activeDisabled = isLastAdmin ? 'disabled' : '';
+
+    return `
+      <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 mb-5">
+        <h4 class="font-bold flex items-center gap-2 mb-4">
+          ${icon('user')}
+          ${escapeHtml(title)}
+        </h4>
+
+        <input id="userFormMode" type="hidden" value="${escapeAttribute(mode)}">
+        <input id="userId" type="hidden" value="${escapeAttribute(safeUser.user_id || '')}">
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold mb-2">이메일</label>
+            <input
+              id="userEmail"
+              type="email"
+              class="input ${isEdit ? 'bg-slate-100 text-slate-500' : ''}"
+              value="${escapeAttribute(safeUser.email || '')}"
+              placeholder="user@senedu.kr"
+              ${emailDisabled}
+            >
+            ${isEdit
+              ? '<p class="mt-2 text-sm text-slate-500">이메일은 사용자 고유 식별자로 수정하지 않습니다.</p>'
+              : '<p class="mt-2 text-sm text-slate-500">senedu.kr 계정만 등록할 수 있습니다.</p>'
+            }
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-2">이름</label>
+            <input
+              id="userName"
+              type="text"
+              class="input"
+              value="${escapeAttribute(safeUser.name || '')}"
+              placeholder="예: 홍길동"
+            >
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-2">부서</label>
+            <input
+              id="userDepartment"
+              type="text"
+              class="input"
+              value="${escapeAttribute(safeUser.department || '')}"
+              placeholder="예: 정보과"
+            >
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-2">내선번호</label>
+            <input
+              id="userExtension"
+              type="text"
+              class="input"
+              value="${escapeAttribute(safeUser.extension || '')}"
+              placeholder="예: 1234"
+            >
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-2">권한</label>
+            <select id="userRole" class="input ${isLastAdmin ? 'bg-slate-100 text-slate-500' : ''}" ${roleDisabled}>
+              <option value="user" ${safeUser.role === 'user' ? 'selected' : ''}>일반 사용자</option>
+              <option value="subadmin" ${safeUser.role === 'subadmin' ? 'selected' : ''}>보조관리자</option>
+              <option value="admin" ${safeUser.role === 'admin' ? 'selected' : ''}>관리자</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-2">정렬 순서</label>
+            <input
+              id="userSortOrder"
+              type="number"
+              class="input"
+              value="${escapeAttribute(safeUser.sort_order || '')}"
+              placeholder="예: 10"
+            >
+          </div>
+        </div>
+
+        <div class="mt-4 grid gap-3">
+          <label class="flex items-start gap-2 text-sm">
+            <input
+              id="userActive"
+              type="checkbox"
+              class="mt-1 rounded border-slate-300"
+              ${safeUser.active === false ? '' : 'checked'}
+              ${activeDisabled}
+            >
+            <span>활성 사용자</span>
+          </label>
+
+          <label class="flex items-start gap-2 text-sm">
+            <input
+              id="userIsAuthManager"
+              type="checkbox"
+              class="mt-1 rounded border-slate-300"
+              ${safeUser.is_auth_manager ? 'checked' : ''}
+            >
+            <span>GPT 로그인 인증번호 담당자</span>
+          </label>
+          ${isLastAdmin
+            ? `
+              <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                최소 1명의 활성 관리자는 유지되어야 하므로 이 사용자의 권한을 낮추거나 비활성화할 수 없습니다.
+              </div>
+            `
+            : ''
+          }
+        </div>
+
+        <div class="mt-5 flex flex-col md:flex-row gap-2">
+          <button id="saveUserButton" type="button" class="btn-primary">
+            ${icon('check')}
+            저장
+          </button>
+
+          <button id="cancelUserFormButton" type="button" class="btn-secondary">
+            ${icon('x')}
+            취소
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderAdminSettings(settings) {
+    if (!settings || settings.length === 0) {
+      return card(`
+        <h3 class="text-lg font-bold flex items-center gap-2 mb-3">
+          ${icon('settings')}
+          설정 관리
+        </h3>
+        <div class="rounded-xl bg-slate-50 border border-slate-200 p-5 text-slate-600">
+          표시할 설정이 없습니다.
+        </div>
+      `);
+    }
+
+    return card(`
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        <div>
+          <h3 class="text-lg font-bold flex items-center gap-2">
+            ${icon('settings')}
+            설정 관리
+          </h3>
+          <p class="text-sm text-slate-600 mt-1">
+            앱 제목, 안내 문구, 기본 사용 시간 등을 수정한 뒤 한 번에 저장합니다.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="btn-secondary" onclick="handleLoadAdminSettings()">
+            ${icon('search')}
+            새로고침
+          </button>
+
+          <button type="button" id="saveAllAdminSettingsButton" class="btn-primary">
+            ${icon('check')}
+            변경사항 저장
+          </button>
+        </div>
+      </div>
+
+      <div class="grid gap-4">
+        ${settings.map(setting => renderAdminSettingItem(setting)).join('')}
+      </div>
+    `);
+  }
+
+  function renderAdminSettingItem(setting) {
+    const requiredBadge = setting.required
+      ? '<span class="text-xs font-bold text-rose-600">필수</span>'
+      : '<span class="text-xs font-bold text-slate-400">선택</span>';
+
+    const description = setting.description
+      ? `<p class="mt-2 text-sm text-slate-500">${escapeHtml(setting.description)}</p>`
+      : '';
+
+    const constraints = renderSettingConstraints(setting);
+
+    return `
+      <div
+        class="rounded-2xl border border-slate-200 bg-white p-4"
+        data-setting-row="${escapeAttribute(setting.setting_key)}"
+      >
+        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-2">
+              <p class="font-bold">${escapeHtml(setting.label)}</p>
+              ${requiredBadge}
+            </div>
+
+            <p class="text-xs text-slate-400 mb-2">
+              ${escapeHtml(setting.setting_key)}
+            </p>
+
+            ${renderSettingInput(setting)}
+
+            ${description}
+            ${constraints}
+          </div>
+
+          <div class="flex lg:pt-8">
+            <span
+              class="hidden rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700"
+              data-setting-changed-badge
+            >
+              변경됨
+            </span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderSettingInput(setting) {
+    const value = setting.setting_value || '';
+
+    if (setting.type === 'multiline') {
+      return `
+        <textarea
+          class="input min-h-28"
+          data-setting-input
+        >${escapeHtml(value)}</textarea>
+      `;
+    }
+
+    if (setting.type === 'integer') {
+      return `
+        <input
+          type="number"
+          class="input"
+          data-setting-input
+          value="${escapeAttribute(value)}"
+          min="${escapeAttribute(setting.min || '')}"
+          max="${escapeAttribute(setting.max || '')}"
+        >
+      `;
+    }
+
+    return `
+      <input
+        type="text"
+        class="input"
+        data-setting-input
+        value="${escapeAttribute(value)}"
+      >
+    `;
+  }
+
+  function renderSettingConstraints(setting) {
+    const items = [];
+
+    if (setting.type === 'integer') {
+      if (setting.min !== '') {
+        items.push('최소 ' + setting.min);
+      }
+
+      if (setting.max !== '') {
+        items.push('최대 ' + setting.max);
+      }
+    }
+
+    if (setting.maxLength) {
+      items.push(setting.maxLength + '자 이하');
+    }
+
+    if (items.length === 0) {
+      return '';
+    }
+
+    return `
+      <p class="mt-2 text-xs text-slate-400">
+        ${escapeHtml(items.join(' / '))}
+      </p>
+    `;
+  }
+
+
+  function renderAdminGuideItems(guides) {
+    const safeGuides = guides || [];
+
+    return card(`
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        <div>
+          <h3 class="text-lg font-bold flex items-center gap-2">
+            ${icon('info')}
+            안내 문구 관리
+          </h3>
+          <p class="text-sm text-slate-600 mt-1">
+            사용 안내 화면에 표시되는 GuideItems를 수정합니다. 비활성 항목도 관리자 화면에는 표시됩니다.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="btn-secondary" onclick="handleLoadAdminGuideItems()">
+            ${icon('search')}
+            새로고침
+          </button>
+
+          <button type="button" id="saveAllAdminGuideItemsButton" class="btn-primary">
+            ${icon('check')}
+            변경사항 저장
+          </button>
+        </div>
+      </div>
+
+      ${safeGuides.length === 0
+        ? `
+          <div class="rounded-xl bg-slate-50 border border-slate-200 p-5 text-slate-600">
+            표시할 안내 문구가 없습니다.
+          </div>
+        `
+        : `
+          <div class="grid gap-4">
+            ${safeGuides.map(guide => renderAdminGuideItem(guide)).join('')}
+          </div>
+        `
+      }
+    `);
+  }
+
+
+  function renderAdminGuideItem(guide) {
+    const safeGuide = guide || {};
+    const guideId = String(safeGuide.guide_id || '').trim();
+    const sortOrder = safeGuide.sort_order === '' || safeGuide.sort_order === null || safeGuide.sort_order === undefined
+      ? ''
+      : String(safeGuide.sort_order);
+    const active = safeGuide.active === true;
+
+    return `
+      <div
+        class="rounded-2xl border border-slate-200 bg-white p-4"
+        data-guide-row="${escapeAttribute(guideId)}"
+      >
+        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+          <div class="flex-1">
+            <div class="flex flex-wrap items-center gap-2 mb-2">
+              <p class="font-bold">${escapeHtml(safeGuide.title || '제목 없음')}</p>
+              ${statusBadge(active ? '활성' : '비활성')}
+            </div>
+
+            <p class="text-xs text-slate-400 mb-4">
+              ${escapeHtml(guideId)}
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-semibold mb-2">분류</label>
+                <input
+                  type="text"
+                  class="input"
+                  data-guide-field="category"
+                  value="${escapeAttribute(safeGuide.category || '')}"
+                  maxlength="50"
+                >
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold mb-2">제목</label>
+                <input
+                  type="text"
+                  class="input"
+                  data-guide-field="title"
+                  value="${escapeAttribute(safeGuide.title || '')}"
+                  maxlength="100"
+                >
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold mb-2">정렬 순서</label>
+                <input
+                  type="number"
+                  class="input"
+                  data-guide-field="sort_order"
+                  value="${escapeAttribute(sortOrder)}"
+                  min="0"
+                  max="999999"
+                  step="1"
+                >
+                <p class="mt-2 text-xs text-slate-400">0 이상 999999 이하 정수</p>
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold mb-2">표시 여부</label>
+                <label class="flex items-start gap-2 text-sm rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <input
+                    type="checkbox"
+                    class="mt-1 rounded border-slate-300"
+                    data-guide-field="active"
+                    ${active ? 'checked' : ''}
+                  >
+                  <span>사용 안내 화면에 표시</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="mt-4">
+              <label class="block text-sm font-semibold mb-2">내용</label>
+              <textarea
+                class="input min-h-32"
+                data-guide-field="content"
+                maxlength="3000"
+              >${escapeHtml(safeGuide.content || '')}</textarea>
+              <p class="mt-2 text-xs text-slate-400">
+                3000자 이하. HTML 문자열은 실행하지 않고 텍스트로 표시합니다.
+              </p>
+            </div>
+          </div>
+
+          <div class="flex lg:pt-8">
+            <span
+              class="hidden rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700"
+              data-guide-changed-badge
+            >
+              변경됨
+            </span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+
+
+  function isLastActiveAdminUser(user, users) {
+    if (!user || user.role !== 'admin' || user.active !== true) {
+      return false;
+    }
+
+    const activeAdminCount = (users || []).filter(function(item) {
+      return item.active === true && item.role === 'admin';
+    }).length;
+
+    return activeAdminCount <= 1;
+  }
+
+
+  function renderUsersTable(users) {
+    if (!users || users.length === 0) {
+      return `
+        <div class="rounded-xl bg-slate-50 border border-slate-200 p-5 text-slate-600">
+          등록된 사용자가 없습니다.
+        </div>
+      `;
+    }
+
+    return `
+      <div class="overflow-x-auto rounded-xl border border-slate-200">
+        <table class="min-w-full text-sm">
+          <thead class="bg-slate-50">
+            <tr>
+              <th class="text-left p-3 font-semibold text-slate-600">이름</th>
+              <th class="text-left p-3 font-semibold text-slate-600">부서</th>
+              <th class="text-left p-3 font-semibold text-slate-600">이메일</th>
+              <th class="text-left p-3 font-semibold text-slate-600">권한</th>
+              <th class="text-left p-3 font-semibold text-slate-600">상태</th>
+              <th class="text-left p-3 font-semibold text-slate-600">인증 담당</th>
+              <th class="text-left p-3 font-semibold text-slate-600">작업</th>
+            </tr>
+          </thead>
+
+          <tbody class="divide-y divide-slate-200 bg-white">
+            ${users.map(user => `
+              <tr>
+                <td class="p-3 font-semibold">${escapeHtml(user.name || '-')}</td>
+                <td class="p-3">${escapeHtml(user.department || '-')}</td>
+                <td class="p-3">${escapeHtml(user.email || '-')}</td>
+                <td class="p-3">${roleBadge(user.role)}</td>
+                <td class="p-3">${statusBadge(user.active ? '활성' : '비활성')}</td>
+                <td class="p-3">${user.is_auth_manager ? '예' : '-'}</td>
+                <td class="p-3">
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      class="btn-small-secondary"
+                      data-user-action="edit"
+                      data-user-id="${escapeAttribute(user.user_id)}"
+                    >
+                      ${icon('settings')}
+                      수정
+                    </button>
+
+                    ${isLastActiveAdminUser(user, users)
+                      ? `
+                        <button
+                          type="button"
+                          class="btn-small-secondary opacity-60 cursor-not-allowed"
+                          disabled
+                          title="최소 1명의 활성 관리자는 유지되어야 합니다."
+                        >
+                          ${icon('lock')}
+                          관리자 유지
+                        </button>
+                      `
+                      : `
+                        <button
+                          type="button"
+                          class="${user.active ? 'btn-small-danger' : 'btn-small-primary'}"
+                          data-user-action="toggleActive"
+                          data-user-id="${escapeAttribute(user.user_id)}"
+                        >
+                          ${user.active ? icon('x') : icon('check')}
+                          ${user.active ? '비활성화' : '활성화'}
+                        </button>
+                      `
+                    }
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+
+  function roleBadge(role) {
+    const cleanRole = String(role || '').trim();
+
+    const map = {
+      admin: {
+        label: '관리자',
+        className: 'bg-slate-900 text-white border-slate-900',
+      },
+      subadmin: {
+        label: '보조관리자',
+        className: 'bg-blue-50 text-blue-700 border-blue-200',
+      },
+      user: {
+        label: '일반 사용자',
+        className: 'bg-slate-50 text-slate-700 border-slate-200',
+      },
+    };
+
+    const item = map[cleanRole] || map.user;
+
+    return `
+      <span class="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${item.className}">
+        ${escapeHtml(item.label)}
+      </span>
+    `;
+  }
+
+  function renderTestResults(response) {
+    const summary = response.data && response.data.summary ? response.data.summary : { total: 0, passed: 0, failed: 0 };
+    const phases = response.data && response.data.phases ? response.data.phases : [];
+    const tests = response.data && response.data.tests ? response.data.tests : [];
+
+    return card(`
+      <h3 class="text-lg font-bold flex items-center gap-2 mb-4">
+        ${icon('test')}
+        전체 테스트 결과
+      </h3>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+        ${metricCard('전체', summary.total)}
+        ${metricCard('PASS', summary.passed)}
+        ${metricCard('FAIL', summary.failed)}
+      </div>
+
+      <div class="mb-5">
+        <h4 class="font-bold mb-2">Phase 요약</h4>
+        ${renderSimpleTable(
+          ['Phase', '결과', 'PASS', 'FAIL'],
+          phases.map(phase => [
+            phase.phase,
+            phase.ok ? 'PASS' : 'FAIL',
+            phase.summary.passed,
+            phase.summary.failed,
+          ])
+        )}
+      </div>
+
+      <details class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <summary class="cursor-pointer font-semibold">상세 테스트 보기</summary>
+        <div class="mt-4">
+          ${renderSimpleTable(
+            ['Phase', 'Code', 'Result', 'Name'],
+            tests.map(test => [
+              test.phase,
+              test.code,
+              test.passed ? 'PASS' : 'FAIL',
+              test.name,
+            ])
+          )}
+        </div>
+      </details>
+    `);
+  }
+
+  function quickActionCard(iconName, title, description, route) {
+    return `
+      <button
+        type="button"
+        data-route="${escapeAttribute(route)}"
+        class="block w-full text-left bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:border-slate-300 transition"
+      >
+        <div class="flex items-start gap-3">
+          <div class="text-slate-600 mt-1">${icon(iconName)}</div>
+          <div>
+            <h3 class="font-bold">${escapeHtml(title)}</h3>
+            <p class="text-sm text-slate-600 mt-1">${escapeHtml(description)}</p>
+          </div>
+        </div>
+      </button>
+    `;
+  }
+
+  function safetyCheckbox(id, label) {
+    return `
+      <label class="flex items-start gap-2">
+        <input id="${id}" type="checkbox" class="mt-1 rounded border-slate-300">
+        <span>${escapeHtml(label)}</span>
+      </label>
+    `;
+  }
+
+  function guideIcon(category) {
+    if (category === '적합') return icon('check');
+    if (category === '부적합') return icon('warning');
+    if (category === '민감정보') return icon('shield');
+    if (category === '평가보안') return icon('lock');
+    if (category === '학생부') return icon('user');
+    return icon('info');
+  }
+</script>

@@ -1,0 +1,37 @@
+<script>
+  const state = {
+    initialized: false,
+    currentRoute: '#home',
+    data: null,
+    selectedReservationDate: getLocalDateInputValue(new Date()),
+    isLoading: false,
+
+    screenLocked: false,
+    screenLockReason: '',
+    autoLockMinutes: 30,
+    autoLockTimerId: null,
+    autoLockLastActivityAt: 0,
+    autoLockListenersAttached: false,
+
+    adminRegistrationRequests: [],
+
+    adminUsers: [],
+    adminUserFormMode: null,
+    adminUserFormData: null,
+    adminUserBulkRows: [],
+    adminUserBulkResults: [],
+    adminUserBulkFileName: '',
+
+
+    adminSettings: [],
+    adminGuideItems: [],
+  };
+  const routes = [
+    { hash: '#home', label: '홈', icon: 'home' },
+    { hash: '#apply', label: '사용 신청', icon: 'plus' },
+    { hash: '#reservations', label: '오늘 예약', icon: 'calendar' },
+    { hash: '#mine', label: '내 예약', icon: 'user' },
+    { hash: '#guide', label: '사용 안내', icon: 'info' },
+    { hash: '#admin', label: '관리자', icon: 'settings', adminOnly: true },
+  ];
+</script>

@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Local environment
+.env
+.env.*
+*.local
+
+# Apps Script / Google credentials
+.clasp.json
+credentials*.json
+client_secret*.json
+token.json
+
+# Logs
+*.log
+logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Private exports / real data
+private/
+exports/
+data/
+*.local.csv
+*_real.csv
+*_prod.csv
+
+# Keep template CSV only when it contains sample data
+!templates/일괄등록.csv

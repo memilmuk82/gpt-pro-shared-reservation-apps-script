@@ -1,0 +1,498 @@
+<script>
+  function renderHeader() {
+    const settings = state.data && state.data.settings
+      ? state.data.settings
+      : {};
+
+    const currentUser = state.data && state.data.currentUser
+      ? state.data.currentUser
+      : {};
+
+    document.getElementById('appTitle').textContent =
+      settings.app_title || 'GPT Pro 공동 사용 지원 시스템';
+
+    document.getElementById('organizationName').textContent =
+      settings.organization_name || '학교 부서';
+
+    const userBadge = document.getElementById('userBadge');
+
+    if (!currentUser.user) {
+      userBadge.innerHTML = `
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-slate-700">
+            ${icon('user')}
+            ${escapeHtml(currentUser.email || '미등록 사용자')}
+          </span>
+
+          <button type="button" class="btn-small-secondary" data-security-action="lock">
+            ${icon('lock')}
+            사용 종료
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    userBadge.innerHTML = `
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-slate-700">
+          ${icon('user')}
+          ${escapeHtml(currentUser.user.name)}
+          <span class="text-slate-400">/</span>
+          ${escapeHtml(currentUser.user.department)}
+        </span>
+
+        <button type="button" class="btn-small-secondary" data-security-action="lock">
+          ${icon('lock')}
+          사용 종료
+        </button>
+      </div>
+    `;
+  }
+
+  function renderNavTabs() {
+    const nav = document.getElementById('navTabs');
+    const visibleRoutes = routes.filter(route => !route.adminOnly || isAdmin());
+
+    nav.innerHTML = visibleRoutes.map(route => {
+      const active = (window.location.hash || '#home') === route.hash;
+
+      return `
+        <button
+          type="button"
+          data-route="${escapeAttribute(route.hash)}"
+          class="inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition
+            ${active ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}"
+        >
+          ${icon(route.icon)}
+          ${escapeHtml(route.label)}
+        </button>
+      `;
+    }).join('');
+  }
+
+  function renderUnregisteredView() {
+    const currentUser = state.data.currentUser || {};
+    const authManagers = state.data.authManagers || [];
+    const request = state.data.myRegistrationRequest || null;
+
+    const shouldShowRequestForm =
+      !request ||
+      request.status === '반려';
+
+    document.getElementById('unregisteredView').innerHTML = `
+      <div class="grid gap-4">
+        ${card(`
+          <div class="flex items-start gap-3">
+            <div class="mt-1 text-slate-500">${icon('info')}</div>
+            <div class="w-full">
+              <h2 class="text-xl font-bold mb-2">등록되지 않은 사용자입니다</h2>
+              <p class="text-slate-600 leading-relaxed">
+                본 시스템은 부서 GPT Pro 공동 사용 지원 시스템입니다.
+                사용이 필요한 경우 아래 정보를 입력해 관리자에게 등록 요청을 보낼 수 있습니다.
+              </p>
+
+              <div class="mt-4 rounded-xl bg-slate-50 border border-slate-200 p-4 text-sm">
+                <p class="text-slate-500">접속 계정</p>
+                <p class="font-semibold">${escapeHtml(currentUser.email || '확인 불가')}</p>
+              </div>
+            </div>
+          </div>
+        `)}
+
+        ${renderRegistrationRequestStatus(request)}
+
+        ${shouldShowRequestForm ? renderRegistrationRequestForm() : ''}
+
+        ${renderAuthManagerCard(authManagers)}
+
+        ${renderGuideCards()}
+      </div>
+    `;
+
+    const button = document.getElementById('registrationRequestButton');
+
+    if (button) {
+      button.addEventListener('click', handleCreateRegistrationRequest);
+    }
+  }
+
+  function renderHomeView() {
+    const currentReservation = state.data.currentReservation;
+    const nextReservation = state.data.nextReservation;
+    const todayReservations = state.data.todayReservations || [];
+    const authManagers = state.data.authManagers || [];
+
+    document.getElementById('viewHome').innerHTML = `
+      <div class="grid gap-4">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          ${renderCurrentReservationCard(currentReservation)}
+          ${renderNextReservationCard(nextReservation)}
+        </div>
+
+        ${renderAuthManagerCard(authManagers)}
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          ${quickActionCard('plus', '사용 신청', '예약 등록 또는 즉시 사용 시작', '#apply')}
+          ${quickActionCard('calendar', '오늘 예약', '오늘 사용 예정 확인', '#reservations')}
+          ${quickActionCard('info', '사용 안내', '적합 업무와 주의사항 확인', '#guide')}
+        </div>
+
+        ${card(`
+          <div class="flex items-center justify-between gap-3 mb-4">
+            <h2 class="text-lg font-bold flex items-center gap-2">
+              ${icon('calendar')}
+              오늘 예약
+            </h2>
+            <button
+              type="button"
+              data-route="#reservations"
+              class="text-sm font-semibold text-blue-700 hover:underline"
+            >
+              전체 보기
+            </button>
+          </div>
+          ${renderReservationList(todayReservations.slice(0, 5), '오늘 예약이 없습니다.')}
+        `)}
+      </div>
+    `;
+  }
+
+  function renderApplyView() {
+    const workTypes = state.data.workTypes || [];
+
+    const defaultDuration = getAppSettingNumber(
+      'default_duration_minutes',
+      60
+    );
+
+    const maxDuration = getAppSettingNumber(
+      'max_duration_minutes',
+      180
+    );
+
+    const standardDurations = [30, 60, 120, 180];
+
+    const isCustomDefault =
+      standardDurations.indexOf(defaultDuration) === -1;
+
+    document.getElementById('viewApply').innerHTML = `
+      <div class="grid gap-4">
+        ${card(`
+          <h2 class="text-xl font-bold flex items-center gap-2 mb-2">
+            ${icon('plus')}
+            사용 신청
+          </h2>
+          <p class="text-slate-600 leading-relaxed">
+            GPT Pro는 교육과정 개발, 교재 개발, 워크북 제작, 정책 분석, 코드 검토 등
+            고난도 교육 연구 업무 지원을 목적으로 운영됩니다.
+          </p>
+          <p class="text-sm text-slate-500 mt-3">
+            예약 등록은 시작 시간과 사용 시간을 기준으로 종료 예정 시간이 자동 계산됩니다.
+            지금 사용 시작은 현재 시각부터 선택한 사용 시간만큼 등록됩니다.
+          </p>
+        `)}
+
+        <form id="applyForm" class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <div class="grid gap-5">
+            <div>
+              <label class="block text-sm font-semibold mb-2">작업 유형</label>
+              <select id="workType" class="input">
+                <option value="">작업 유형 선택</option>
+                ${workTypes.map(type => `
+                  <option value="${escapeAttribute(type)}">${escapeHtml(type)}</option>
+                `).join('')}
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-semibold mb-2">작업명</label>
+              <input id="workTitle" type="text" class="input" placeholder="예: 일본어Ⅰ 워크북 제작">
+            </div>
+
+            <div>
+              <label class="block text-sm font-semibold mb-2">작업 설명</label>
+              <textarea id="workDescription" class="input min-h-28" placeholder="작업 내용을 간단히 입력하세요."></textarea>
+              <p class="mt-2 text-sm text-slate-500">
+                작업 설명에는 개인정보, 민감정보, 평가·출제 자료, 실제 학생 생활기록부 자료를 입력하지 마십시오.
+              </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-semibold mb-2">시작 시간</label>
+                <input id="startTime" type="datetime-local" class="input">
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold mb-2">종료 예정 시간</label>
+                <input id="endTime" type="datetime-local" class="input">
+                <p class="mt-2 text-sm text-slate-500">
+                  시작 시간과 사용 시간을 기준으로 자동 입력됩니다. 필요하면 직접 수정할 수 있습니다.
+                </p>
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold mb-2">사용 시간</label>
+                <select id="expectedMinutes" class="input">
+                  <option value="30" ${defaultDuration === 30 ? 'selected' : ''}>30분</option>
+                  <option value="60" ${defaultDuration === 60 ? 'selected' : ''}>1시간</option>
+                  <option value="120" ${defaultDuration === 120 ? 'selected' : ''}>2시간</option>
+                  <option value="180" ${defaultDuration === 180 ? 'selected' : ''}>3시간</option>
+                  <option value="custom" ${isCustomDefault ? 'selected' : ''}>직접 입력</option>
+                </select>
+
+                <div id="customDurationArea" class="hidden mt-3">
+                  <label class="block text-sm font-semibold mb-2">직접 입력</label>
+                  <div class="flex items-center gap-2">
+                    <input
+                      id="customDurationMinutes"
+                      type="number"
+                      min="30"
+                      step="30"
+                      class="input"
+                      value="${escapeAttribute(isCustomDefault ? defaultDuration : '')}"
+                      placeholder="예: 240"
+                    >
+                    <span class="text-sm text-slate-500 whitespace-nowrap">분</span>
+                  </div>
+                  <p class="mt-2 text-sm text-slate-500">
+                    30분 단위 입력을 권장합니다. 예: 240분 = 4시간
+                  </p>
+                </div>
+
+                <p id="durationNotice" class="hidden mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  ${escapeHtml(formatMinutes(maxDuration))}을 초과하는 사용은 다른 예약자와 사전 조율을 권장합니다.
+                </p>
+              </div>
+            </div>
+
+            <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4">
+              <h3 class="font-bold mb-3 flex items-center gap-2">
+                ${icon('shield')}
+                사용 전 확인
+              </h3>
+
+              <div class="space-y-3 text-sm">
+                ${safetyCheckbox('safePrivacy', '개인정보·민감정보를 입력하지 않습니다.')}
+                ${safetyCheckbox('safeExam', '평가·출제 자료를 입력하지 않습니다.')}
+                ${safetyCheckbox('safeRecord', '실제 학생 생활기록부 자료를 입력하지 않습니다.')}
+                ${safetyCheckbox('safeStudentText', '실제 학생 자료를 이용한 생기부 문구 생성, 평가총평 생성, 상담문구 초안 생성을 하지 않습니다.')}
+              </div>
+            </div>
+
+            <div id="conflictArea" class="hidden rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900"></div>
+
+            <div class="flex flex-col md:flex-row gap-3">
+              <button type="button" id="checkConflictButton" class="btn-secondary">
+                ${icon('search')}
+                충돌 확인
+              </button>
+
+              <button type="button" id="createReservationButton" class="btn-primary">
+                ${icon('calendar')}
+                예약 등록
+              </button>
+
+              <button type="button" id="createImmediateButton" class="btn-primary">
+                ${icon('play')}
+                지금 사용 시작
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    `;
+
+    document.getElementById('checkConflictButton').addEventListener('click', handleCheckConflict);
+    document.getElementById('createReservationButton').addEventListener('click', handleCreateReservation);
+    document.getElementById('createImmediateButton').addEventListener('click', handleCreateImmediateReservation);
+
+    initializeApplyTimeControls();
+  }
+
+  function renderReservationsView() {
+    const reservations = state.data.todayReservations || [];
+
+    document.getElementById('viewReservations').innerHTML = `
+      <div class="grid gap-4">
+        ${card(`
+          <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+            <div>
+              <h2 class="text-xl font-bold flex items-center gap-2 mb-2">
+                ${icon('calendar')}
+                오늘 예약
+              </h2>
+              <p class="text-slate-600">날짜를 선택해 예약 현황을 확인합니다.</p>
+            </div>
+
+            <div class="flex gap-2">
+              <input id="reservationDate" type="date" class="input max-w-48" value="${escapeAttribute(state.selectedReservationDate)}">
+              <button id="loadDateReservationsButton" class="btn-secondary" type="button">
+                ${icon('search')}
+                조회
+              </button>
+            </div>
+          </div>
+        `)}
+
+        ${card(`
+          <div id="reservationList">
+            ${renderReservationList(reservations, '해당 날짜의 예약이 없습니다.')}
+          </div>
+        `)}
+      </div>
+    `;
+
+    document.getElementById('loadDateReservationsButton').addEventListener('click', handleLoadReservationsByDate);
+  }
+
+  function renderMineView() {
+    const reservations = state.data.myReservations || [];
+
+    document.getElementById('viewMine').innerHTML = `
+      <div class="grid gap-4">
+        ${card(`
+          <h2 class="text-xl font-bold flex items-center gap-2 mb-2">
+            ${icon('user')}
+            내 예약
+          </h2>
+          <p class="text-slate-600">본인 예약을 확인하고 상태를 변경할 수 있습니다.</p>
+        `)}
+
+        ${card(`
+          ${renderMyReservationList(reservations)}
+        `)}
+      </div>
+    `;
+
+    bindMyReservationButtons();
+  }
+
+  function renderGuideView() {
+    const authManagers = state.data.authManagers || [];
+
+    document.getElementById('viewGuide').innerHTML = `
+      <div class="grid gap-4">
+        ${card(`
+          <h2 class="text-xl font-bold flex items-center gap-2 mb-2">
+            ${icon('info')}
+            사용 안내
+          </h2>
+          <p class="text-slate-600 leading-relaxed">
+            부서 공용 GPT Pro는 교육 연구와 교재 개발을 위한 공동 자원입니다.
+            개인 정보, 평가 보안 자료, 실제 학생 자료 입력은 피해주세요.
+          </p>
+        `)}
+
+        ${renderAuthManagerCard(authManagers)}
+
+        ${renderGuideCards()}
+      </div>
+    `;
+  }
+
+  function renderAdminView() {
+    if (!isAdmin()) {
+      document.getElementById('viewAdmin').innerHTML = '';
+      return;
+    }
+
+    document.getElementById('viewAdmin').innerHTML = `
+      <div class="grid gap-4">
+        ${card(`
+          <h2 class="text-xl font-bold flex items-center gap-2 mb-2">
+            ${icon('settings')}
+            관리자
+          </h2>
+          <p class="text-slate-600">
+            관리자 화면입니다. 설정 관리, 사용자 관리, 등록 요청 관리, 통계 조회, 전체 테스트 실행을 지원합니다.
+          </p>
+        `)}
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          ${card(`
+            <h3 class="font-bold flex items-center gap-2 mb-3">
+              ${icon('settings')}
+              설정 관리
+            </h3>
+            <p class="text-sm text-slate-600 mb-4">앱 제목, 안내 문구, 사용 시간 기준을 수정합니다.</p>
+            <button id="loadAdminSettingsButton" type="button" class="btn-primary w-full justify-center">
+              ${icon('settings')}
+              설정 불러오기
+            </button>
+          `)}
+
+          ${card(`
+            <h3 class="font-bold flex items-center gap-2 mb-3">
+              ${icon('info')}
+              안내 문구 관리
+            </h3>
+            <p class="text-sm text-slate-600 mb-4">사용 안내 화면에 표시되는 안내 문구를 수정합니다.</p>
+            <button id="loadAdminGuideItemsButton" type="button" class="btn-primary w-full justify-center">
+              ${icon('info')}
+              안내 문구 불러오기
+            </button>
+          `)}
+
+          ${card(`
+            <h3 class="font-bold flex items-center gap-2 mb-3">
+              ${icon('user')}
+              사용자 관리
+            </h3>
+            <p class="text-sm text-slate-600 mb-4">사용자 목록을 확인하고 권한, 부서, 내선, 사용 여부를 관리합니다.</p>
+            <button id="loadUsersButton" type="button" class="btn-primary w-full justify-center">
+              ${icon('search')}
+              사용자 불러오기
+            </button>
+          `)}
+
+          ${card(`
+            <h3 class="font-bold flex items-center gap-2 mb-3">
+              ${icon('user')}
+              등록 요청 관리
+            </h3>
+            <p class="text-sm text-slate-600 mb-4">미등록 사용자의 등록 요청을 승인하거나 반려합니다.</p>
+            <button id="loadRegistrationRequestsButton" type="button" class="btn-primary w-full justify-center">
+              ${icon('search')}
+              등록 요청 불러오기
+            </button>
+          `)}
+
+          ${card(`
+            <h3 class="font-bold flex items-center gap-2 mb-3">
+              ${icon('chart')}
+              통계 조회
+            </h3>
+            <p class="text-sm text-slate-600 mb-4">사용자별, 작업 유형별, 월별 통계를 조회합니다.</p>
+            <button id="loadStatsButton" type="button" class="btn-primary w-full justify-center">
+              ${icon('chart')}
+              통계 불러오기
+            </button>
+          `)}
+
+          ${card(`
+            <h3 class="font-bold flex items-center gap-2 mb-3">
+              ${icon('test')}
+              전체 테스트 실행
+            </h3>
+            <p class="text-sm text-slate-600 mb-4">Phase 1~9 전체 테스트를 실행합니다.</p>
+            <button id="runAllTestsButton" type="button" class="btn-primary w-full justify-center">
+              ${icon('test')}
+              테스트 실행
+            </button>
+          `)}
+        </div>
+
+        <section id="adminResultArea"></section>
+      </div>
+    `;
+
+    document.getElementById('loadAdminSettingsButton').addEventListener('click', handleLoadAdminSettings);
+    document.getElementById('loadAdminGuideItemsButton').addEventListener('click', handleLoadAdminGuideItems);
+    document.getElementById('loadUsersButton').addEventListener('click', handleLoadUsers);
+    document.getElementById('loadRegistrationRequestsButton').addEventListener('click', handleLoadRegistrationRequests);
+    document.getElementById('loadStatsButton').addEventListener('click', handleLoadStats);
+    document.getElementById('runAllTestsButton').addEventListener('click', handleRunAllTests);
+  }
+</script>

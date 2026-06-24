@@ -1,0 +1,141 @@
+<script>
+  document.addEventListener('DOMContentLoaded', initApp);
+  document.addEventListener('click', handleRouteButtonClick);
+  document.addEventListener('click', handleSecurityButtonClick);
+  window.addEventListener('hashchange', handleRouteChange);
+
+  async function initApp() {
+    setupAutoLock();
+    renderNavTabs();
+    await loadInitialData();
+    handleRouteChange();
+  }
+
+  async function loadInitialData() {
+    showLoading(true);
+
+    try {
+      const response = await serverCall('getInitialDataV2');
+
+      if (state.screenLocked) {
+        return;
+      }
+
+      if (!response.ok) {
+        showAlert(response.message || '초기 데이터를 불러오지 못했습니다.', 'error');
+        return;
+      }
+
+      state.data = response.data;
+      state.initialized = true;
+
+      renderHeader();
+      renderNavTabs();
+
+      if (!isActiveUser()) {
+        renderUnregisteredView();
+        showOnly('unregisteredView');
+        scrollToTop();
+        resetAutoLockTimer();
+        return;
+      }
+
+      renderAllViews();
+      resetAutoLockTimer();  
+    } catch (error) {
+      showAlert('초기 데이터 로딩 실패: ' + error.message, 'error');
+    } finally {
+      showLoading(false);
+    }
+  }
+
+  function handleRouteChange() {
+    if (state.screenLocked) {
+      return;
+    }
+
+    const hash = window.location.hash || '#home';
+    state.currentRoute = hash;
+
+    if (!state.initialized) {
+      return;
+    }
+
+    if (!isActiveUser()) {
+      showOnly('unregisteredView');
+      scrollToTop();
+      return;
+    }
+
+    if (hash === '#admin' && !isAdmin()) {
+      window.location.hash = '#home';
+      return;
+    }
+
+    renderNavTabs();
+
+    const viewMap = {
+      '#home': 'viewHome',
+      '#apply': 'viewApply',
+      '#reservations': 'viewReservations',
+      '#mine': 'viewMine',
+      '#guide': 'viewGuide',
+      '#admin': 'viewAdmin',
+    };
+
+    if (hash === '#apply') {
+      renderApplyView();
+    }
+
+    if (hash === '#admin') {
+      renderAdminView();
+    }
+
+    showOnly(viewMap[hash] || 'viewHome');
+    scrollToTop();
+  }
+
+  function handleRouteButtonClick(event) {
+    if (state.screenLocked) {
+      return;
+    }
+
+    const routeButton = event.target.closest('[data-route]');
+
+    if (!routeButton) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const hash = routeButton.dataset.route;
+
+    if (!hash) {
+      return;
+    }
+
+    navigateTo(hash);
+  }
+
+  function navigateTo(hash) {
+    if (state.screenLocked) {
+      return;
+    }
+    
+    if (window.location.hash === hash) {
+      handleRouteChange();
+      return;
+    }
+
+    window.location.hash = hash;
+  }
+
+  function renderAllViews() {
+    renderHomeView();
+    renderApplyView();
+    renderReservationsView();
+    renderMineView();
+    renderGuideView();
+    renderAdminView();
+  }
+</script>

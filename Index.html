@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <?!= include('Styles'); ?>
+
+  <title>GPT Pro 공동 사용 지원 시스템</title>
+</head>
+
+<body class="bg-slate-100 text-slate-900">
+  <div id="app" class="min-h-screen">
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+      <div class="max-w-6xl mx-auto px-4 py-4">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p id="organizationName" class="text-sm font-medium text-slate-500">
+              학교 부서
+            </p>
+            <h1 id="appTitle" class="text-xl md:text-2xl font-bold tracking-tight">
+              GPT Pro 공동 사용 지원 시스템
+            </h1>
+          </div>
+
+          <div id="userBadge" class="text-sm text-slate-600">
+            접속자 확인 중...
+          </div>
+        </div>
+
+        <nav id="navTabs" class="mt-4 flex gap-2 overflow-x-auto pb-1">
+        </nav>
+      </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-6">
+      <section id="alertArea" class="mb-4 hidden"></section>
+
+      <section id="loadingView" class="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
+        <div class="animate-pulse">
+          <div class="h-5 bg-slate-200 rounded w-48 mb-4"></div>
+          <div class="h-4 bg-slate-200 rounded w-full mb-2"></div>
+          <div class="h-4 bg-slate-200 rounded w-2/3"></div>
+        </div>
+      </section>
+
+      <section id="unregisteredView" class="hidden"></section>
+
+      <section id="viewHome" class="hidden"></section>
+      <section id="viewApply" class="hidden"></section>
+      <section id="viewReservations" class="hidden"></section>
+      <section id="viewMine" class="hidden"></section>
+      <section id="viewGuide" class="hidden"></section>
+      <section id="viewAdmin" class="hidden"></section>
+    </main>
+  </div>
+
+  <?!= include('Client_Utils'); ?>
+  <?!= include('Client_State'); ?>
+  <?!= include('Client_Icons'); ?>
+  <?!= include('Client_Components'); ?>
+  <?!= include('Client_Views'); ?>
+  <?!= include('Client_Handlers'); ?>
+  <?!= include('Client_App'); ?>
+
+</body>
+</html>
